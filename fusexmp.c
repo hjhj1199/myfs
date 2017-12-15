@@ -55,17 +55,22 @@ static struct {
 
 static int xmp_getattr(const char *path, struct stat *stbuf)
 {
-  char fullpath[PATH_MAX];
-	int res;
+  char fullpaths[2][PATH_MAX];
+  int driveA_res,driveB_res;
+  struct stat buf[2];
 
-  sprintf(fullpath, "%s%s",
-      rand() % 2 == 0 ? global_context.driveA : global_context.driveB, path);
+  sprintf(fullpaths[0], "%s%s",global_context.driveA, path);
+  sprintf(fullpaths[1], "%s%s",global_context.driveB, path);
+  
+  driveA_res=lstat(fullpaths[0],&buf[0]);
+  driveB_res=lstat(fullpaths[1],&buf[1]);
+  
+  if (driveA_res == -1 || driveB_res == -1) return -errno;
 
-	res = lstat(fullpath, stbuf);
-	if (res == -1)
-		return -errno;
-
-	return 0;
+  buf[0].st_size+=buf[1].st_size;
+  *stbuf = buf[0];
+  fprintf(stdout,"hi\n"); 
+  return 0;
 }
 
 static int xmp_access(const char *path, int mask)
@@ -370,22 +375,32 @@ static int xmp_open(const char *path, struct fuse_file_info *fi)
 static int xmp_read(const char *path, char *buf, size_t size, off_t offset,
     struct fuse_file_info *fi)
 {
-  char fullpath[PATH_MAX];
+  char fullpaths[2][PATH_MAX];
   int fd;
-  int res;
-
-  sprintf(fullpath, "%s%s",
-      rand() % 2 == 0 ? global_context.driveA : global_context.driveB, path);
+  int res=0;
+  int read_res=0,i=0,toread_size=512;
+  sprintf(fullpaths[0], "%s%s", global_context.driveA, path);
+  sprintf(fullpaths[1], "%s%s", global_context.driveA, path);
   (void) fi;
-  fd = open(fullpath, O_RDONLY);
-  if (fd == -1)
-    return -errno;
+  do
+  {
+    const char* fullpath = fullpaths[i%2];
+    fd=open(fullpath,O_RDONLY);
+    if (fd ==-1) return -errno;
 
-  res = pread(fd, buf, size, offset);
-  if (res == -1)
-    res = -errno;
+    read_res=pread(fd,buf+i*512,toread_size,offset);
+    
+    if (read_res == -1) return -errno;
+    else if (read_res == 0) break;
+    
+    close(fd);
+    
+    res+=read_res;
+    if (i%2==1) offset+=512;
+    
+    i++;
+  }while(1);
 
-  close(fd);
   return res;
 }
 
@@ -395,24 +410,33 @@ static int xmp_write(const char *path, const char *buf, size_t size,
   char fullpaths[2][PATH_MAX];
   int fd;
   int res;
-
+  int write_res = 0,i,towrite_size=0,write_size;
+  
   (void) fi;
 
   sprintf(fullpaths[0], "%s%s", global_context.driveA, path);
   sprintf(fullpaths[1], "%s%s", global_context.driveB, path);
 
-  for (int i = 0; i < 2; ++i) {
-    const char* fullpath = fullpaths[i];
-
-    fd = open(fullpath, O_WRONLY);
-    if (fd == -1)
-      return -errno;
-
-    res = pwrite(fd, buf, size, offset);
-    if (res == -1)
-      res = -errno;
+  write_size = size;
+  fprintf(stdout,"%d\n\n",write_size);
+  for (i=0;i*512<size;i++)
+  {
+    const char *fullpath=fullpaths[i%2];
+    if (write_size>512) towrite_size=512;
+    else towrite_size=write_size;
+    fprintf(stdout,"order : %d, write_size : %d, towrite_size : %d\n",i,write_size,towrite_size);
+    fd=open(fullpath,O_WRONLY);
+    if (fd==-1) return -errno;
+    
+    write_res=pwrite(fd,buf+i*512,towrite_size,offset);
 
     close(fd);
+    if (write_res == -1) return -errno;
+    res+=write_res;
+    write_size-=write_res;
+    if(i%2==1) offset+=512;
+
+    fprintf(stdout,"%d\n",write_res);
   }
 
   return res;
