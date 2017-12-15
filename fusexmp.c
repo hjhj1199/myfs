@@ -408,7 +408,7 @@ static int xmp_write(const char *path, const char *buf, size_t size,
 {
   char fullpaths[2][PATH_MAX];
   int fd;
-  int res;
+  int res=0;
   int write_res = 0,i,towrite_size=0,write_size;
   
   (void) fi;
@@ -435,7 +435,7 @@ static int xmp_write(const char *path, const char *buf, size_t size,
     if(i%2==1) offset+=512;
   }
 
-  return res;
+return res;
 }
 
 static int xmp_statfs(const char *path, struct statvfs *stbuf)
