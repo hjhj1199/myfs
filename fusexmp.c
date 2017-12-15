@@ -69,7 +69,6 @@ static int xmp_getattr(const char *path, struct stat *stbuf)
 
   buf[0].st_size+=buf[1].st_size;
   *stbuf = buf[0];
-  fprintf(stdout,"hi\n"); 
   return 0;
 }
 
@@ -388,7 +387,7 @@ static int xmp_read(const char *path, char *buf, size_t size, off_t offset,
     fd=open(fullpath,O_RDONLY);
     if (fd ==-1) return -errno;
 
-    read_res=pread(fd,buf+i*512,toread_size,offset);
+    read_res=pread(fd,buf+i*toread_size,toread_size,offset);
     
     if (read_res == -1) return -errno;
     else if (read_res == 0) break;
@@ -418,25 +417,22 @@ static int xmp_write(const char *path, const char *buf, size_t size,
   sprintf(fullpaths[1], "%s%s", global_context.driveB, path);
 
   write_size = size;
-  fprintf(stdout,"%d\n\n",write_size);
+
   for (i=0;i*512<size;i++)
   {
     const char *fullpath=fullpaths[i%2];
     if (write_size>512) towrite_size=512;
     else towrite_size=write_size;
-    fprintf(stdout,"order : %d, write_size : %d, towrite_size : %d\n",i,write_size,towrite_size);
+
     fd=open(fullpath,O_WRONLY);
     if (fd==-1) return -errno;
     
-    write_res=pwrite(fd,buf+i*512,towrite_size,offset);
-
+    write_res=pwrite(fd,buf+write_res,towrite_size,offset);
     close(fd);
     if (write_res == -1) return -errno;
     res+=write_res;
     write_size-=write_res;
     if(i%2==1) offset+=512;
-
-    fprintf(stdout,"%d\n",write_res);
   }
 
   return res;
